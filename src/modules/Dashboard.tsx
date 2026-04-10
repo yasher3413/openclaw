@@ -377,7 +377,7 @@ export const Dashboard = ({ user }: DashboardProps) => {
             </p>
           </div>
           <div className="text-xs text-night-400">
-            {loading ? 'Fetching via Claude...' : 'Cached for today'}
+            {loading ? 'Fetching via OpenAI...' : 'Cached for today'}
           </div>
         </div>
         <div className="mt-5 grid gap-4 lg:grid-cols-3">

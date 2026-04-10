@@ -5,6 +5,7 @@ import { useSupabaseTable } from '../lib/hooks'
 import { STORAGE_KEYS } from '../lib/storage'
 import type { Capture, Chapter, SubstackDraft, WritingSession } from '../lib/types'
 import { createId, formatDate, todayKey } from '../lib/utils'
+import { sendToSupermemory } from '../lib/supermemory'
 
 const bookOne = 'To Have It Figured Out'
 const bookTwo = "This Isn't the Main Thing"
@@ -94,6 +95,7 @@ export const WritingHub = ({ user }: WritingHubProps) => {
 
   const addCapture = () => {
     if (!captureDraft.trim()) return
+    sendToSupermemory(captureDraft, 'writing', 'openclaw_raw_writing')
     setCaptures([
       {
         id: createId(),

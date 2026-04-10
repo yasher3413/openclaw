@@ -4,6 +4,7 @@ import { useSupabaseTable } from '../lib/hooks'
 import { STORAGE_KEYS } from '../lib/storage'
 import type { Capture } from '../lib/types'
 import { createId } from '../lib/utils'
+import { sendToSupermemory } from '../lib/supermemory'
 
 type QuickCaptureProps = {
   user: User | null
@@ -21,6 +22,7 @@ export const QuickCapture = ({ user }: QuickCaptureProps) => {
 
   const addCapture = () => {
     if (!content.trim()) return
+    sendToSupermemory(content, tag, 'openclaw_capture')
     setCaptures([
       {
         id: createId(),
