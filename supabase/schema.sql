@@ -110,6 +110,21 @@ create table if not exists daily_captures (
   tag text not null
 );
 
+create table if not exists oauth_tokens (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users not null,
+  provider text not null,
+  email text,
+  access_token text not null,
+  refresh_token text,
+  expires_at timestamptz,
+  scope text,
+  created_at timestamptz default now()
+);
+
+create unique index if not exists oauth_tokens_user_provider_idx
+  on oauth_tokens (user_id, provider);
+
 alter table projects enable row level security;
 alter table runs enable row level security;
 alter table macros enable row level security;
@@ -120,6 +135,7 @@ alter table substack_drafts enable row level security;
 alter table learning_phases enable row level security;
 alter table travel_notes enable row level security;
 alter table daily_captures enable row level security;
+alter table oauth_tokens enable row level security;
 
 create policy "user_access_projects"
   on projects for all
@@ -168,5 +184,10 @@ create policy "user_access_travel_notes"
 
 create policy "user_access_daily_captures"
   on daily_captures for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "user_access_oauth_tokens"
+  on oauth_tokens for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);

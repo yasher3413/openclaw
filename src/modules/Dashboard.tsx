@@ -1,5 +1,5 @@
 import type { User } from '@supabase/supabase-js'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSupabaseTable } from '../lib/hooks'
 import { STORAGE_KEYS } from '../lib/storage'
 import type { DailyLog, MacroEntry, RunLog } from '../lib/types'
@@ -14,6 +14,14 @@ import {
   upcomingRaceDate,
 } from '../lib/utils'
 import { useDailyNews } from '../lib/news'
+import {
+  createEvent,
+  fetchUnreadEmail,
+  fetchUpcomingEvents,
+  sendEmail,
+  startGoogleOAuth,
+  startMicrosoftOAuth,
+} from '../lib/integrations'
 
 const defaultDailyLog = (): DailyLog => ({
   id: createId(),
@@ -69,6 +77,27 @@ export const Dashboard = ({ user }: DashboardProps) => {
   )
   const { news, timestamp, loading } = useDailyNews()
   const [runDraft, setRunDraft] = useState<RunLog>(emptyRun)
+  const [provider, setProvider] = useState<'google' | 'microsoft'>('google')
+  const [unread, setUnread] = useState<
+    { id: string; subject: string; from: string; snippet: string }[]
+  >([])
+  const [events, setEvents] = useState<
+    { id: string; title: string; start: string; end: string; location: string }[]
+  >([])
+  const [emailDraft, setEmailDraft] = useState({
+    to: '',
+    subject: '',
+    body: '',
+  })
+  const [eventDraft, setEventDraft] = useState({
+    title: '',
+    start: '',
+    end: '',
+    location: '',
+    attendees: '',
+    description: '',
+  })
+  const [integrationStatus, setIntegrationStatus] = useState<string>('')
 
   const today = todayKey()
   const dailyLog = dailyLogs.find((log) => log.date === today) ?? defaultDailyLog()
@@ -114,6 +143,21 @@ export const Dashboard = ({ user }: DashboardProps) => {
     setMacros(nextEntries)
   }
 
+  useEffect(() => {
+    if (!user) return
+    const load = async () => {
+      try {
+        const emailData = await fetchUnreadEmail(provider)
+        setUnread(emailData.messages ?? [])
+        const calendarData = await fetchUpcomingEvents(provider)
+        setEvents(calendarData.events ?? [])
+      } catch (error) {
+        console.error(error)
+      }
+    }
+    load()
+  }, [provider, user])
+
   const saveRun = () => {
     const distance = Number(runDraft.distance_km)
     const duration = Number(runDraft.duration_min)
@@ -137,6 +181,48 @@ export const Dashboard = ({ user }: DashboardProps) => {
   const fatsTarget = Math.round(macroEntry.body_weight_goal_kg * 0.8)
   const carbsTarget = Math.round(macroEntry.body_weight_goal_kg * 3)
   const raceDays = daysUntil(upcomingRaceDate())
+
+  const handleSendEmail = async () => {
+    if (!emailDraft.to || !emailDraft.subject) return
+    setIntegrationStatus('Sending email...')
+    try {
+      await sendEmail(provider, emailDraft)
+      setEmailDraft({ to: '', subject: '', body: '' })
+      setIntegrationStatus('Email sent.')
+    } catch (error) {
+      console.error(error)
+      setIntegrationStatus('Email failed to send.')
+    }
+  }
+
+  const handleCreateEvent = async () => {
+    if (!eventDraft.title || !eventDraft.start || !eventDraft.end) return
+    setIntegrationStatus('Creating event...')
+    try {
+      await createEvent(provider, {
+        title: eventDraft.title,
+        start: eventDraft.start,
+        end: eventDraft.end,
+        location: eventDraft.location,
+        description: eventDraft.description,
+        attendees: eventDraft.attendees
+          ? eventDraft.attendees.split(',').map((item) => item.trim())
+          : [],
+      })
+      setEventDraft({
+        title: '',
+        start: '',
+        end: '',
+        location: '',
+        attendees: '',
+        description: '',
+      })
+      setIntegrationStatus('Event created.')
+    } catch (error) {
+      console.error(error)
+      setIntegrationStatus('Event creation failed.')
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -360,6 +446,201 @@ export const Dashboard = ({ user }: DashboardProps) => {
                 ? `${minutesToPace(runs[0]?.pace_min_km)} / km`
                 : '—'}
             </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-night-700 bg-night-900/70 p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Integrations</h3>
+            <p className="text-xs text-night-400">
+              Connect Gmail/Calendar and Outlook for daily brief + actions.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              className="rounded-lg border border-night-700 bg-night-950 px-3 py-2 text-xs text-night-200 hover:border-accent-400"
+              onClick={() => user && startGoogleOAuth(user.id)}
+            >
+              Connect Google
+            </button>
+            <button
+              className="rounded-lg border border-night-700 bg-night-950 px-3 py-2 text-xs text-night-200 hover:border-accent-400"
+              onClick={() => user && startMicrosoftOAuth(user.id)}
+            >
+              Connect Outlook
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-night-300">
+          <span>Active provider</span>
+          <select
+            className="rounded-lg border border-night-700 bg-night-950 px-2 py-1 text-xs text-white"
+            value={provider}
+            onChange={(event) =>
+              setProvider(event.target.value as 'google' | 'microsoft')
+            }
+          >
+            <option value="google">Google</option>
+            <option value="microsoft">Outlook</option>
+          </select>
+          {integrationStatus ? (
+            <span className="text-accent-300">{integrationStatus}</span>
+          ) : null}
+        </div>
+
+        <div className="mt-6 grid gap-4 lg:grid-cols-3">
+          <div className="rounded-xl border border-night-700 bg-night-950/80 p-4">
+            <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-300">
+              Unread email
+            </h4>
+            <div className="mt-3 space-y-3 text-sm text-night-200">
+              {unread.length ? (
+                unread.map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-lg border border-night-800 bg-night-900/70 p-3"
+                  >
+                    <p className="text-sm font-semibold text-white">
+                      {item.subject}
+                    </p>
+                    <p className="mt-1 text-xs text-night-400">{item.from}</p>
+                    <p className="mt-2 text-xs text-night-300">{item.snippet}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-night-400">No unread messages.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-night-700 bg-night-950/80 p-4">
+            <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-300">
+              Upcoming events
+            </h4>
+            <div className="mt-3 space-y-3 text-sm text-night-200">
+              {events.length ? (
+                events.map((event) => (
+                  <div
+                    key={event.id}
+                    className="rounded-lg border border-night-800 bg-night-900/70 p-3"
+                  >
+                    <p className="text-sm font-semibold text-white">
+                      {event.title}
+                    </p>
+                    <p className="mt-1 text-xs text-night-400">
+                      {event.start}
+                    </p>
+                    {event.location ? (
+                      <p className="mt-1 text-xs text-night-300">
+                        {event.location}
+                      </p>
+                    ) : null}
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-night-400">No upcoming events.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-night-700 bg-night-950/80 p-4">
+            <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-300">
+              Quick actions
+            </h4>
+            <div className="mt-3 space-y-3">
+              <input
+                className="w-full rounded-lg border border-night-700 bg-night-950 px-3 py-2 text-xs text-white"
+                placeholder="Email to"
+                value={emailDraft.to}
+                onChange={(event) =>
+                  setEmailDraft({ ...emailDraft, to: event.target.value })
+                }
+              />
+              <input
+                className="w-full rounded-lg border border-night-700 bg-night-950 px-3 py-2 text-xs text-white"
+                placeholder="Subject"
+                value={emailDraft.subject}
+                onChange={(event) =>
+                  setEmailDraft({ ...emailDraft, subject: event.target.value })
+                }
+              />
+              <textarea
+                className="w-full rounded-lg border border-night-700 bg-night-950 px-3 py-2 text-xs text-white"
+                rows={3}
+                placeholder="Email body"
+                value={emailDraft.body}
+                onChange={(event) =>
+                  setEmailDraft({ ...emailDraft, body: event.target.value })
+                }
+              />
+              <button
+                className="w-full rounded-lg bg-accent-500 px-3 py-2 text-xs font-semibold text-night-950"
+                onClick={handleSendEmail}
+              >
+                Send email
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <input
+                className="w-full rounded-lg border border-night-700 bg-night-950 px-3 py-2 text-xs text-white"
+                placeholder="Event title"
+                value={eventDraft.title}
+                onChange={(event) =>
+                  setEventDraft({ ...eventDraft, title: event.target.value })
+                }
+              />
+              <input
+                className="w-full rounded-lg border border-night-700 bg-night-950 px-3 py-2 text-xs text-white"
+                type="datetime-local"
+                value={eventDraft.start}
+                onChange={(event) =>
+                  setEventDraft({ ...eventDraft, start: event.target.value })
+                }
+              />
+              <input
+                className="w-full rounded-lg border border-night-700 bg-night-950 px-3 py-2 text-xs text-white"
+                type="datetime-local"
+                value={eventDraft.end}
+                onChange={(event) =>
+                  setEventDraft({ ...eventDraft, end: event.target.value })
+                }
+              />
+              <input
+                className="w-full rounded-lg border border-night-700 bg-night-950 px-3 py-2 text-xs text-white"
+                placeholder="Location"
+                value={eventDraft.location}
+                onChange={(event) =>
+                  setEventDraft({ ...eventDraft, location: event.target.value })
+                }
+              />
+              <input
+                className="w-full rounded-lg border border-night-700 bg-night-950 px-3 py-2 text-xs text-white"
+                placeholder="Attendees (comma separated)"
+                value={eventDraft.attendees}
+                onChange={(event) =>
+                  setEventDraft({ ...eventDraft, attendees: event.target.value })
+                }
+              />
+              <textarea
+                className="w-full rounded-lg border border-night-700 bg-night-950 px-3 py-2 text-xs text-white"
+                rows={2}
+                placeholder="Description"
+                value={eventDraft.description}
+                onChange={(event) =>
+                  setEventDraft({ ...eventDraft, description: event.target.value })
+                }
+              />
+              <button
+                className="w-full rounded-lg bg-accent-500 px-3 py-2 text-xs font-semibold text-night-950"
+                onClick={handleCreateEvent}
+              >
+                Create event
+              </button>
+            </div>
           </div>
         </div>
       </section>
