@@ -1,0 +1,7 @@
+url,start,end,hook,credit,layout,facecam,zoom,name
+# Fill in the URL + timestamps after you find the moment in the VOD/clip. Lines starting with # are skipped.
+#PASTE_TIM_VOD_OR_CLIP_URL,,,TimTheTatman lost it at this GTA 6 ad 💀,twitch.tv/timthetatman,split,"0.75,0.05,0.23,0.3",,tim-eager-beaver
+#PASTE_ADIN_CLIP_URL,,,Adin heard Carti in GTA 6 and froze,kick.com/adinross,blur,,1.0,adin-carti
+#PASTE_N3ON_CLIP_URL,,,N3ON did the GTA 6 trunk challenge IRL,kick.com/n3on,blur,,1.0,n3on-trunk
+#PASTE_N3ON_NZ_CLIP_URL,,,N3ON flew to New Zealand for GTA 6 and it broke,kick.com/n3on,blur,,1.0,n3on-nz
+#PASTE_ADIN_UNBOX_URL,,,Adin opened his GTA 6 box... it was just a code,kick.com/adinross,blur,,1.0,adin-unbox
