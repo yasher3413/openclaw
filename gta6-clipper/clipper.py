@@ -120,6 +120,16 @@ def fetch(src: str, start: float | None, end: float | None, work: Path) -> Path:
 
 
 # ---------------------------------------------------------------- 2. transcribe
+def load_audio(path: Path):
+    """16 kHz mono float32 via ffmpeg (avoids PyAV version problems inside faster-whisper)."""
+    import numpy as np
+    pcm = subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-i", str(path), "-vn", "-ac", "1", "-ar", "16000", "-f", "s16le", "-"],
+        capture_output=True, check=True,
+    ).stdout
+    return np.frombuffer(pcm, np.int16).astype(np.float32) / 32768.0
+
+
 def transcribe(path: Path, model_name: str, language: str | None) -> list[dict]:
     from faster_whisper import WhisperModel  # imported lazily so --words-json works without it
 
@@ -132,7 +142,7 @@ def transcribe(path: Path, model_name: str, language: str | None) -> list[dict]:
     print(f"  whisper {model_name} on {device}")
     model = WhisperModel(model_name, device=device, compute_type=compute)
     segments, _ = model.transcribe(
-        str(path), language=language, word_timestamps=True, vad_filter=True,
+        load_audio(path), language=language, word_timestamps=True, vad_filter=True,
         condition_on_previous_text=False,
     )
     words = []
